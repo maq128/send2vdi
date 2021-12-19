@@ -11,16 +11,19 @@ void printHelp() {
 }
 
 BOOL CALLBACK enumWindowsProc(HWND hWnd, LPARAM lParam) {
+    // 获取窗口标题的长度
     int length = ::GetWindowTextLengthA(hWnd);
     if( 0 == length ) return TRUE;
 
+    // 获取窗口标题的文字
     char* buffer = new char[length + 1];
     memset(buffer, 0, (length + 1) * sizeof(char));
     GetWindowTextA(hWnd, buffer, length + 1);
     std::string title = buffer;
     delete[] buffer;
 
-    std::string prefix = "\xb6\xc0\xcf\xed\xd7\xc0\xc3\xe6 - "; // 字符串里面是中文“独享桌面”
+    // 根据窗口标题来判定，如果是目标窗口，则将其调到最前面（输入焦点）
+    std::string prefix = "\xb6\xc0\xcf\xed\xd7\xc0\xc3\xe6 - "; // 字符串里面是GB23123编码的中文“独享桌面”
     if (title.rfind(prefix, 0) == 0) {
         SetForegroundWindow(hWnd);
     }
@@ -28,6 +31,7 @@ BOOL CALLBACK enumWindowsProc(HWND hWnd, LPARAM lParam) {
     return TRUE;
 }
 
+// ASCII 字符与键盘 scan code 的对应表
 int sc_map[] = {
     0x0039, // 32  SPACE
     0x0102, // 33  !
@@ -127,6 +131,7 @@ int sc_map[] = {
 };
 
 void typeInChar(char c) {
+    // 获取字符对应的 scan code
     BOOL isShift = FALSE;
     BYTE sc = 0;
     if (c == '\t') {
@@ -145,6 +150,8 @@ void typeInChar(char c) {
     }
     // printf("%c[%02X]: %02X %c\n", c, c, sc, isShift?'*':' ');
     // printf("%c", c);
+
+    // 模拟键盘的按键动作
     if (isShift) {
         keybd_event(0, 0x2A, 0, 0);
     }
@@ -159,12 +166,16 @@ void typeInString(std::string str, BOOL bTextMode) {
     int cnt = 0;
     for (std::string::iterator it = str.begin(); it != str.end(); ++it) {
         if (bTextMode) {
+            // 文本模式，直接模拟键盘输入该字符
             typeInChar(*it);
         } else {
+            // hex 模式，把字符转换成 hex 格式并模拟键盘输入
             char hex[3];
             sprintf(hex, "%02x", (BYTE)(*it));
             typeInChar(hex[0]);
             typeInChar(hex[1]);
+
+            // 适当插入换行符，便于检查是否出现丢字
             printf(hex);
             if (++cnt >= 32) {
                 typeInChar('\n');
@@ -172,11 +183,13 @@ void typeInString(std::string str, BOOL bTextMode) {
                 cnt = 0;
             }
         }
+        // 略做停顿，避免消息大量堆积
         Sleep(10);
     }
 }
 
 int main(int argc, char *argv[]) {
+    // 解析命令行参数
     std::string filename;
     BOOL bTextMode = FALSE;
     // printf("argc[%d] argv[%s]\n", argc, argv[0]);
@@ -198,8 +211,10 @@ int main(int argc, char *argv[]) {
         return EXIT_SUCCESS;
     }
 
+    // 遍历所有主窗口，找到 VDI 窗口并将其调到最前面
     ::EnumWindows(enumWindowsProc, 0L);
 
+    // 读入文件内容并模拟敲键盘进行发送
     std::ifstream file(filename);
     std::string str((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     // printf("content: %s\n", str.c_str());

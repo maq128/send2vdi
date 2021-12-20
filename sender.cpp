@@ -18,21 +18,21 @@ BOOL CALLBACK enumWindowsProc(HWND hWnd, LPARAM lParam) {
     // 获取窗口标题的文字
     char* buffer = new char[length + 1];
     memset(buffer, 0, (length + 1) * sizeof(char));
-    GetWindowTextA(hWnd, buffer, length + 1);
+    ::GetWindowTextA(hWnd, buffer, length + 1);
     std::string title = buffer;
     delete[] buffer;
 
     // 根据窗口标题来判定，如果是目标窗口，则将其调到最前面（输入焦点）
-    std::string prefix = "\xb6\xc0\xcf\xed\xd7\xc0\xc3\xe6 - "; // 字符串里面是GB23123编码的中文“独享桌面”
+    std::string prefix = "\xb6\xc0\xcf\xed\xd7\xc0\xc3\xe6 - "; // 字符串里面是GB2312编码的中文“独享桌面”
     if (title.rfind(prefix, 0) == 0) {
-        SetForegroundWindow(hWnd);
+        ::SetForegroundWindow(hWnd);
     }
 
     return TRUE;
 }
 
 // ASCII 字符与键盘 scan code 的对应表
-int sc_map[] = {
+WORD sc_map[] = {
     0x0039, // 32  SPACE
     0x0102, // 33  !
     0x0128, // 34  "
@@ -142,29 +142,38 @@ void typeInChar(char c) {
         sc = 0x1c;
     } else if (c >= ' ' && c <= '~') {
         int pos = c - ' ';
-        // printf("-> %d <- %04X\n", pos, sc_map[pos]);
+        // printf("%d -> %04x\n", pos, sc_map[pos]);
         sc = sc_map[pos] & 0xFF;
-        isShift = sc_map[pos] & 0xFF00;
+        isShift = sc_map[pos] & 0xFF00 ? TRUE : FALSE;
     } else {
       return;
     }
     // printf("%c[%02X]: %02X %c\n", c, c, sc, isShift?'*':' ');
-    // printf("%c", c);
 
     // 模拟键盘的按键动作
     if (isShift) {
+        // 按下 SHIFT 键
         keybd_event(0, 0x2A, 0, 0);
     }
+    // 按下字符键
     keybd_event(0, sc, 0, 0);
+    // 松开字符键
     keybd_event(0, sc, KEYEVENTF_KEYUP, 0);
     if (isShift) {
+        // 松开 SHIFT 键
         keybd_event(0, 0x2A, KEYEVENTF_KEYUP, 0);
     }
 }
 
 void typeInString(std::string str, BOOL bTextMode) {
     int cnt = 0;
+    int sofar = 0;
+    int total = str.length();
     for (std::string::iterator it = str.begin(); it != str.end(); ++it) {
+        if (cnt == 0) {
+            printf("\r%4.1f%%: ", (float)sofar * 100 / total);
+        }
+        sofar ++;
         if (bTextMode) {
             // 文本模式，直接模拟键盘输入该字符
             typeInChar(*it);
@@ -184,7 +193,7 @@ void typeInString(std::string str, BOOL bTextMode) {
             }
         }
         // 略做停顿，避免消息大量堆积
-        Sleep(10);
+        ::Sleep(1);
     }
 }
 
@@ -192,7 +201,6 @@ int main(int argc, char *argv[]) {
     // 解析命令行参数
     std::string filename;
     BOOL bTextMode = FALSE;
-    // printf("argc[%d] argv[%s]\n", argc, argv[0]);
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
         if (arg == "-t") {
@@ -215,7 +223,7 @@ int main(int argc, char *argv[]) {
     ::EnumWindows(enumWindowsProc, 0L);
 
     // 读入文件内容并模拟敲键盘进行发送
-    std::ifstream file(filename);
+    std::ifstream file(filename, std::ios::binary);
     std::string str((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     // printf("content: %s\n", str.c_str());
     typeInString(str, bTextMode);
